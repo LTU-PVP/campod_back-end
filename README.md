@@ -1,4 +1,4 @@
-# Media Streaming Lite – Campus Podcast Platform
+# Campus Podcast Lite
 
 > A 10-week, full-stack learning project: build a simple audio-only “campus podcast” platform from scratch.
 
@@ -32,6 +32,39 @@ The focus is on:
 - File handling and basic streaming logic.
 - Clean project organization and use of Git/GitHub.
 
+media-streaming-lite/
+│
+├── README.md                # Project overview, setup instructions
+├── requirements.txt         # Python dependencies (Flask, etc.)
+├── .gitignore               # Ignore venv, uploads, etc.
+│
+├── app/                     # Core Flask application
+│   ├── __init__.py          # App factory (optional)
+│   ├── app.py               # Main entry point
+│   ├── routes.py            # Flask routes
+│   ├── utils.py             # Helper functions (e.g., range request handling)
+│   ├── templates/           # HTML templates
+│   │   ├── base.html        # Common layout
+│   │   ├── index.html       # Episode listing
+│   │   ├── upload.html      # Upload form
+│   │   ├── player.html      # Audio player page
+│   ├── static/              # CSS, JS, images
+│       ├── css/
+│       ├── js/
+│
+├── uploads/                 # Audio files storage (local)
+│
+├── instance/                # SQLite DB (if used)
+│   └── media.db
+│
+├── docs/                    # Specs, diagrams, notes
+│   ├── architecture.md
+│   ├── api-spec.md
+│
+└── tests/                   # Unit tests (optional)
+    ├── test_routes.py
+    ├── test_utils.py
+    
 ---
 
 ## Tech Stack

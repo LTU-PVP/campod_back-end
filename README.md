@@ -270,3 +270,5 @@ Use this as a **personal progress checklist**. You’re expected to drive all im
 If you’re not checking items off the checklist week by week, you’re off track.
  
 If you are checking them off and your app actually runs, you’re doing the work you’re supposed to be doing.
+
+### Testing push restrictions...

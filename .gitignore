@@ -1,1 +1,5 @@
-# Ignore venv, uploads, etc.
+# Created by venv; see https://docs.python.org/3/library/venv.html
+*.cfg
+Scripts
+Lib
+*.db

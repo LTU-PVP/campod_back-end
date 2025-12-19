@@ -1,3 +1,7 @@
-# Python dependencies (Flask, etc.)
+# Python dependencies 
 
-# To be decided
+# python 3.13.9 
+
+#(pip install ...)
+# flask
+# justhtml

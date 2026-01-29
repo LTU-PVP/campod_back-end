@@ -1,1 +1,203 @@
-# Flask routes
+# API Endpoints
+
+from flask import Blueprint, jsonify, request, send_file, abort, current_app
+from werkzeug.utils import secure_filename
+from models import db, Episode, Collection  # adjust if you have separate models.py
+import uuid
+import os
+
+ALLOWED_EXTENSIONS = {'mp3', 'wav', 'm4a', 'ogg'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+# Create Blueprint
+bp = Blueprint('api', __name__, url_prefix='')
+
+# 1. List all shows
+@bp.route('/collections', methods=['GET'])
+def get_Collections():
+    shows = Collection.query.all()
+    return jsonify([s.to_dict() for s in shows])
+
+# 2. Get one show + its episodes (very useful for frontend)
+@bp.route('/collections/<int:collection_id>', methods=['GET'])
+def get_Collection(collection_id):
+    show = Collection.query.get_or_404(collection_id)
+    episodes = Episode.query.filter_by(collection_id=collection_id).all()
+    return jsonify({
+        'show': show.to_dict(),
+        'episodes': [e.to_dict() for e in episodes]
+    })
+
+@bp.route('/episodes', methods=['GET'])
+def get_episodes():
+    """
+    List episodes – now with filtering by collection_id
+    Query params:
+    - collection_id     (int)     Filter by specific show/podcast
+    - page        (int)     default 1
+    - limit       (int)     default 10
+    - sort        (str)     'newest' (default), 'oldest', 'title'
+    - search      (str)     Optional keyword in title or description
+    """
+    query = Episode.query
+
+    # Filter by show
+    collection_id = request.args.get('collection_id', type=int)
+    if collection_id:
+        query = query.filter_by(collection_id=collection_id)
+
+    # Optional search in title or description
+    search = request.args.get('search')
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Episode.title.ilike(search_term)) |
+            (Episode.description.ilike(search_term))
+        )
+
+    # Sorting
+    sort = request.args.get('sort', 'newest')
+    if sort == 'newest':
+        query = query.order_by(Episode.id.desc())  # assuming higher ID = newer
+        # Alternative if you add publish_date:
+        # query = query.order_by(Episode.publish_date.desc())
+    elif sort == 'oldest':
+        query = query.order_by(Episode.id.asc())
+    elif sort == 'title':
+        query = query.order_by(Episode.title.asc())
+
+    # Pagination
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 10, type=int)
+    pagination = query.paginate(page=page, per_page=limit, error_out=False)
+
+    episodes = pagination.items
+
+    return jsonify({
+        "episodes": [ep.to_dict() for ep in episodes],
+        "total": pagination.total,
+        "pages": pagination.pages,
+        "current_page": pagination.page,
+        "per_page": limit,
+        "applied_filters": {
+            "collection_id": collection_id if collection_id else None,
+            "search": search if search else None,
+            "sort": sort
+        }
+    }), 200
+
+# 2. Get single episode details
+@bp.route('/episode/<int:episode_id>', methods=['GET'])
+def get_episode(episode_id):
+    """
+    Get details for one episode.
+    Response: JSON {id, title, description}
+    """
+    episode = Episode.query.get_or_404(episode_id)
+    return jsonify(episode.to_dict())
+
+# 3. Stream media (server-side playback)
+@bp.route('/stream/<int:episode_id>', methods=['GET'])
+def stream_episode(episode_id):
+    """
+    Stream audio file for episode.
+    Supports range requests for seeking in HTML5 audio.
+    Headers: Accept-Ranges: bytes, Content-Type: audio/mpeg
+    No direct download; front-end uses <audio src="/stream/{id}"> to play.
+    """
+    episode = Episode.query.get_or_404(episode_id)
+    file_path = os.path.join(current_app.config['MEDIA_FOLDER'], episode.file_path)
+    
+    if not os.path.exists(file_path):
+        abort(404, description="Media file not found")
+    
+    range_header = request.headers.get('Range', None)
+
+    return send_file(
+        file_path,
+        mimetype='audio/mpeg',
+        conditional=True,  # Handles range requests
+        as_attachment=False  # Streams instead of downloading
+    )
+# 4. Create new collection (for creators)
+@bp.route('/collection', methods=['POST'])
+def add_collection():
+    data = request.json
+    if not data or not data.get('name'):
+        abort(400, "Missing name")
+    
+    show = Collection(
+        name=data['name'],
+        description=data.get('description'),
+        creator_name=data.get('creator_name')
+    )
+    db.session.add(show)
+    db.session.commit()
+    return jsonify(show.to_dict()), 201
+
+
+# 5. When creating episode → require collection_id
+@bp.route('/episode', methods=['POST'])
+def add_episode():
+    data = request.json
+    required = ['title', 'file_path', 'collection_id']
+    if not data or not all(k in data for k in required):
+        abort(400, f"Missing one of: {required}")
+
+    # Default logic
+    collection_id = data.get('collection_id')
+    if collection_id is None:
+        default_show = Collection.query.filter_by(name="Default Podcast").first()
+        if not default_show:
+            abort(500, description="Default show not found – create it first")
+        collection_id = default_show.id
+    
+    # Optional: validate show exists
+    if not Collection.query.get(data['collection_id']):
+        abort(404, "Show not found")
+    
+    episode = Episode(
+        title=data['title'],
+        description=data.get('description'),
+        file_path=data['file_path'],
+        collection_id=data['collection_id']
+    )
+    db.session.add(episode)
+    db.session.commit()
+    return jsonify(episode.to_dict()), 201
+
+@bp.route('/')
+def index():
+    return "Podcast API is running! Try /episodes"
+
+
+@bp.route('/upload-audio', methods=['POST'])
+def upload_audio():
+    """
+    Upload audio file.
+    Returns: JSON with { "file_url": "/stream/<id>", "file_path": "generated_filename.mp3" }
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+    
+    if file and allowed_file(file.filename):
+        # Generate unique filename to avoid overwrites
+        ext = file.filename.rsplit('.', 1)[1].lower()
+        filename = f"{uuid.uuid4()}.{ext}"
+        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        
+        # Return the relative path (used later in metadata)
+        return jsonify({
+            "file_path": filename,  # e.g. "123e4567-e89b-12d3-a456-426614174000.mp3"
+            "file_url": f"/stream/{filename}"  # Optional hint for frontend
+        }), 201
+    
+    return jsonify({"error": "Invalid file type"}), 400

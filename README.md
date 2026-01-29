@@ -185,10 +185,10 @@ Use this as a **personal progress checklist**. You’re expected to drive all im
 
 ### Week 1–2: Foundations
 
-- [x] I can run Python and `pip` on my machine.
-- [x] I have a GitHub account and have **forked** this repo.
-- [x] I cloned my fork locally and can push commits.
-- [x] I created a **GitHub Project** board for this project.
+- [ ] I can run Python and `pip` on my machine.
+- [ ] I have a GitHub account and have **forked** this repo.
+- [ ] I cloned my fork locally and can push commits.
+- [ ] I created a **GitHub Project** board for this project.
 - [ ] I created a minimal HTML page with a title and text.
 - [ ] I added an HTML5 `<audio>` element that can play a **local sample file** (manually placed).
 
